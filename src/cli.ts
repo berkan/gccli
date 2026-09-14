@@ -2,9 +2,11 @@
 
 import * as fs from "fs";
 import { parseArgs } from "util";
+import { handleApprovalCommand, requireApproval } from "./approval.js";
 import { CalendarService } from "./calendar-service.js";
 
 const service = new CalendarService();
+const TOOL = "gccli";
 
 function usage(): never {
 	console.log(`gccli - Google Calendar CLI
@@ -20,6 +22,18 @@ ACCOUNT COMMANDS
   gccli accounts list                        List configured accounts
   gccli accounts add <email> [--manual]      Add account (--manual for browserless OAuth)
   gccli accounts remove <email>              Remove account
+  gccli accounts reauth [emails...] [--manual]
+                                             Re-authorize accounts (all if none given)
+
+APPROVAL
+
+  Irreversible actions (delete) print what they will do and wait for human
+  approval: Touch ID on the macOS host (directly, or via the gauth broker from
+  a container), falling back to a passphrase typed on the terminal.
+
+  gccli approval set-passphrase              Set the fallback passphrase
+  gccli approval status                      Show which approval methods are available
+  gccli approval test                        Run a test approval
 
 CALENDAR COMMANDS
 
@@ -101,6 +115,10 @@ async function main() {
 			await handleAccounts(rest);
 			return;
 		}
+		if (first === "approval") {
+			await handleApprovalCommand(TOOL, rest);
+			return;
+		}
 
 		const account = first;
 		const command = rest[0];
@@ -139,13 +157,17 @@ async function main() {
 				error(`Unknown command: ${command}`);
 		}
 	} catch (e) {
-		error(e instanceof Error ? e.message : String(e));
+		const msg = e instanceof Error ? e.message : String(e);
+		if (msg.includes("invalid_grant")) {
+			error(`${msg}\nToken expired or revoked. Run: ${TOOL} accounts reauth ${first}`);
+		}
+		error(msg);
 	}
 }
 
 async function handleAccounts(args: string[]) {
 	const action = args[0];
-	if (!action) error("Missing action: list|add|remove|credentials");
+	if (!action) error("Missing action: list|add|remove|reauth|credentials");
 
 	switch (action) {
 		case "list": {
@@ -188,6 +210,18 @@ async function handleAccounts(args: string[]) {
 			if (!email) error("Usage: accounts remove <email>");
 			const deleted = service.deleteAccount(email);
 			console.log(deleted ? `Removed '${email}'` : `Not found: ${email}`);
+			break;
+		}
+		case "reauth": {
+			const manual = args.includes("--manual");
+			const emails = args.slice(1).filter((a) => a !== "--manual");
+			const targets = emails.length > 0 ? emails : service.listAccounts().map((a) => a.email);
+			if (targets.length === 0) error("No accounts configured");
+			for (const email of targets) {
+				console.log(`Re-authorizing '${email}'...`);
+				await service.reauthAccount(email, manual);
+				console.log(`Account '${email}' re-authorized`);
+			}
 			break;
 		}
 		default:
@@ -358,6 +392,16 @@ async function handleDelete(account: string, args: string[]) {
 	const calendarId = args[0];
 	const eventId = args[1];
 	if (!calendarId || !eventId) error("Usage: <email> delete <calendarId> <eventId>");
+
+	const event = await service.getEvent(account, calendarId, eventId);
+	const details = [
+		`Calendar: ${calendarId}`,
+		`Event: ${eventId}`,
+		`Summary: ${event.summary || "(no title)"}`,
+		`Start: ${event.start?.dateTime || event.start?.date || ""}`,
+	];
+	if (event.attendees?.length) details.push(`Attendees: ${event.attendees.map((a) => a.email).join(", ")}`);
+	await requireApproval({ tool: TOOL, account, action: "delete", details });
 
 	await service.deleteEvent(account, calendarId, eventId);
 	console.log("Deleted");
