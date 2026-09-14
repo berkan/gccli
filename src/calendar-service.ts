@@ -24,6 +24,7 @@ export class CalendarService {
 		}
 		const oauthFlow = new CalendarOAuthFlow(account.oauth2.clientId, account.oauth2.clientSecret);
 		const refreshToken = await oauthFlow.authorize(manual);
+		await this.verifyIdentity(email, account.oauth2.clientId, account.oauth2.clientSecret, refreshToken);
 		this.accountStorage.addAccount({
 			email,
 			oauth2: { clientId: account.oauth2.clientId, clientSecret: account.oauth2.clientSecret, refreshToken },
@@ -38,6 +39,7 @@ export class CalendarService {
 
 		const oauthFlow = new CalendarOAuthFlow(clientId, clientSecret);
 		const refreshToken = await oauthFlow.authorize(manual);
+		await this.verifyIdentity(email, clientId, clientSecret, refreshToken);
 
 		const account: CalendarAccount = {
 			email,
@@ -62,6 +64,19 @@ export class CalendarService {
 
 	getCredentials(): { clientId: string; clientSecret: string } | null {
 		return this.accountStorage.getCredentials();
+	}
+
+	/** Ensure the Google account that granted the token is the one we are about to store it under. */
+	private async verifyIdentity(email: string, clientId: string, clientSecret: string, refreshToken: string) {
+		const oauth2Client = new OAuth2Client(clientId, clientSecret, "http://localhost");
+		oauth2Client.setCredentials({ refresh_token: refreshToken });
+		const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+		// The primary calendar's id is the account's email address.
+		const primary = await calendar.calendars.get({ calendarId: "primary" });
+		const actual = primary.data.id || "";
+		if (actual.toLowerCase() !== email.toLowerCase()) {
+			throw new Error(`Authorized as '${actual}' but expected '${email}'. Token not saved.`);
+		}
 	}
 
 	private getCalendarClient(email: string): calendar_v3.Calendar {
