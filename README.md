@@ -204,7 +204,15 @@ Fork of [badlogic/gccli](https://github.com/badlogic/gccli). Two changes:
   `gccli approval status | test | set-passphrase`. The gate is `src/approval.ts`, identical across gmcli/gccli/gdcli;
   the host side (Swift Touch ID helper + Node broker) lives in the separate `gauth-host` repo.
 
-Install from source: `npm install && npm run build && npm i -g .`
+Install:
+
+```sh
+npm install -g https://github.com/berkan/gccli/archive/refs/heads/main.tar.gz
+```
+
+`dist/` is committed so the tarball needs no build step. `npm install -g github:berkan/gccli` does not work with
+npm 11: global installs from git specs are linked to a temporary clone that npm then deletes (local, non-global
+git installs are fine). From a checkout: `npm install && npm run build && npm i -g .`
 
 ## Credits
 
