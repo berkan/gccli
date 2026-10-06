@@ -1,4 +1,4 @@
-import { type calendar_v3 } from "googleapis";
+import { type calendar_v3 } from "@googleapis/calendar";
 import type { CalendarAccount } from "./types.js";
 type CalendarEvent = calendar_v3.Schema$Event;
 type Calendar = calendar_v3.Schema$CalendarListEntry;

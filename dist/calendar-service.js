@@ -1,5 +1,5 @@
+import { calendar as calendarApi } from "@googleapis/calendar";
 import { OAuth2Client } from "google-auth-library";
-import { google } from "googleapis";
 import { AccountStorage } from "./account-storage.js";
 import { CalendarOAuthFlow } from "./calendar-oauth-flow.js";
 export class CalendarService {
@@ -50,7 +50,7 @@ export class CalendarService {
     async verifyIdentity(email, clientId, clientSecret, refreshToken) {
         const oauth2Client = new OAuth2Client(clientId, clientSecret, "http://localhost");
         oauth2Client.setCredentials({ refresh_token: refreshToken });
-        const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+        const calendar = calendarApi({ version: "v3", auth: oauth2Client });
         // The primary calendar's id is the account's email address.
         const primary = await calendar.calendars.get({ calendarId: "primary" });
         const actual = primary.data.id || "";
@@ -69,7 +69,7 @@ export class CalendarService {
                 refresh_token: account.oauth2.refreshToken,
                 access_token: account.oauth2.accessToken,
             });
-            const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+            const calendar = calendarApi({ version: "v3", auth: oauth2Client });
             this.calendarClients.set(email, calendar);
         }
         return this.calendarClients.get(email);
